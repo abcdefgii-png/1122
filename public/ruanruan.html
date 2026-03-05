@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>For 阮阮 ✦</title>
+    <style>
+        /* =========================================
+           3) 字体与界面（统一、好看、极简）
+           ========================================= */
+        :root {
+            --font-stack: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+            --color-bg: #000000;
+            --color-text: #E0E0E0;
+            --color-accent: #FFFFFF;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--color-bg);
+            font-family: var(--font-stack);
+            color: var(--color-text);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* 画布全屏 */
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* 左上角常驻文字 */
+        #header-text {
+            position: absolute;
+            top: 20px;
+            left: 24px;
+            font-size: 14px;
+            font-weight: 300;
+            color: var(--color-accent);
+            opacity: 0.6;
+            z-index: 10;
+            letter-spacing: 1px;
+            pointer-events: none;
+        }
+
+        /* Start 按钮遮罩 */
+        #start-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            transition: opacity 0.8s ease;
+        }
+
+        #start-btn {
+            padding: 12px 32px;
+            font-size: 16px;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            border-radius: 30px;
+            cursor: pointer;
+            font-family: var(--font-stack);
+            letter-spacing: 2px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        #start-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+        }
+
+        #error-msg {
+            margin-top: 20px;
+            color: #ff6b6b;
+            font-size: 14px;
+            text-align: center;
+            max-width: 80%;
+            line-height: 1.5;
+            display: none;
+        }
+
+        /* 摄像头预览（右下角，半透明） */
+        #camera-preview {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 120px;
+            height: 90px;
+            background: #111;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            opacity: 0.3;
+            z-index: 50;
+            transform: scaleX(-1); /* 镜像 */
+            object-fit: cover;
+            transition: opacity 0.3s;
+        }
+        
+        #camera-preview:hover {
+            opacity: 0.8;
+        }
+
+        /* 调试 HUD */
+        #debug-hud {
+            position: absolute;
+            top: 60px;
+            left: 24px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            z-index: 50;
+            display: none; /* 默认隐藏，按H显示 */
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 4px;
+            pointer-events: none;
+        }
+
+        /* 动态文案容器 */
+        #message-container {
+            position: absolute;
+            bottom: 20%;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        .fade-text {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.9);
+            letter-spacing: 1px;
+            font-weight: 300;
+            opacity: 0;
+            transition: opacity 1.5s ease;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+        }
+
+        /* 静音按钮 */
+        #mute-btn {
+            position: absolute;
+            top: 20px;
+            right: 24px;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            z-index: 50;
+            opacity: 0.5;
+            transition: opacity 0.3s;
+        }
+        #mute-btn:hover { opacity: 1; }
+        
+        /* Loading spinner */
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid rgba(255,255,255,0.1);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+            display: none;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+    </style>
+    <!-- 引入字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- 1) 标题 -->
+    <div id="header-text">For 阮阮 ✦</div>
+
+    <!-- 2) 调试 HUD -->
+    <div id="debug-hud">
+        <div>FPS: <span id="debug-fps">0</span></div>
+        <div>Gesture: <span id="debug-gesture">None</span></div>
+        <div>State: <span id="debug-state">IDLE</span></div>
+        <div>Particles: <span id="debug-particles">0</span></div>
+    </div>
+
+    <!-- 3) 静音按钮 (SVG) -->
+    <div id="mute-btn" title="Toggle Sound">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: white;">
+            <path id="icon-speaker" d="M11 5L6 9H2v6h4l5 4V5z"></path>
+            <path id="icon-sound-off" d="M23 9l-6 6M17 9l6 6" style="display: block;"></path>
+            <path id="icon-sound-on" d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" style="display: none;"></path>
+        </svg>
+    </div>
+
+    <!-- 4) 动态文案 -->
+    <div id="message-container">
+        <div id="main-message" class="fade-text">它从未真正离开，只是换一种方式在你身边。</div>
+        <div id="egg-message" class="fade-text" style="margin-top: 12px; font-style: italic;">"Love is the one thing that transcends time and space."</div>
+    </div>
+
+    <!-- 5) 启动遮罩 -->
+    <div id="start-overlay">
+        <div class="spinner" id="loading-spinner"></div>
+        <button id="start-btn">Start Experience</button>
+        <div id="error-msg">
+            无法访问摄像头。<br>
+            请确保使用 HTTPS 或 http://localhost 访问。<br>
+            (不要直接双击打开 html 文件)
+        </div>
+    </div>
+
+    <!-- 6) 摄像头预览 -->
+    <video id="camera-preview" playsinline muted autoplay></video>
+
+    <!-- 7) Three.js 画布容器 -->
+    <div id="canvas-container"></div>
+
+    <!-- ================================================================
+         CDN Scripts
+         ================================================================ -->
+    <!-- Three.js (r128) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <script>
+        /**
+         * ============================================================================
+         * 全局配置与状态
+         * ============================================================================
+         */
+        const CONFIG = {
+            particleCount: 4000,
+            colors: {
+                bg: 0x000000,
+                star1: 0xDADADA, // 微粒
+                star2: 0xFFFFFF, // 普通
+                star3: 0xE0E0E0  // 亮星
+            },
+            camera: { fov: 75, z: 100 },
+            gesture: {
+                threshold: 0.6, // 判定阈值
+                historySize: 10, // 平滑帧数
+                cooldown: 500 // 状态切换冷却 ms
+            },
+            egg: {
+                holdTime: 2000, // 触发彩蛋需要保持的时间 ms
+                cooldown: 8000  // 彩蛋冷却
+            }
+        };
+
+        const STATE = {
+            IDLE: 'IDLE',
+            GATHER_CAT: 'GATHER_CAT',
+            RELEASE: 'RELEASE'
+        };
+
+        let appState = {
+            current: STATE.IDLE,
+            gesture: 'none', // 'fist', 'open_palm', 'none'
+            lastGestureChange: 0,
+            gestureHistory: [],
+            isMuted: true,
+            debugMode: false,
+            catFormedTime: 0,
+            eggTriggerTime: 0,
+            eggHoldStart: 0,
+            hasShownMainText: false
+        };
+
+        // DOM Elements
+        const ui = {
+            overlay: document.getElementById('start-overlay'),
+            startBtn: document.getElementById('start-btn'),
+            spinner: document.getElementById('loading-spinner'),
+            errorMsg: document.getElementById('error-msg'),
+            video: document.getElementById('camera-preview'),
+            container: document.getElementById('canvas-container'),
+            muteBtn: document.getElementById('mute-btn'),
+            iconOff: document.getElementById('icon-sound-off'),
+            iconOn: document.getElementById('icon-sound-on'),
+            debugHud: document.getElementById('debug-hud'),
+            debugFps: document.getElementById('debug-fps'),
+            debugGesture: document.getElementById('debug-gesture'),
+            debugState: document.getElementById('debug-state'),
+            debugParticles: document.getElementById('debug-particles'),
+            mainMsg: document.getElementById('main-message'),
+            eggMsg: document.getElementById('egg-message')
+        };
+
+        /**
+         * ============================================================================
+         * 1. Three.js 初始化与粒子系统
+         * ============================================================================
+         */
+        let scene, camera, renderer, particles, geometry, material;
+        let galaxyPoints = []; // 银河形态的目标点
+        let catPoints = [];    // 猫形态的目标点
+        let clock = new THREE.Clock();
+
+        function initThree() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(CONFIG.colors.bg);
+            // 增加一点环境雾，增强深邃感
+            scene.fog = new THREE.FogExp2(0x000000, 0.002);
+
+            camera = new THREE.PerspectiveCamera(CONFIG.camera.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = CONFIG.camera.z;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            ui.container.appendChild(renderer.domElement);
+
+            // 生成目标点数据
+            generateGalaxyPoints();
+            generateCatPoints();
+
+            // 创建粒子系统
+            createParticles();
+
+            // 窗口调整
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        /**
+         * 生成银河带点阵 (斜向分布)
+         */
+        function generateGalaxyPoints() {
+            galaxyPoints = new Float32Array(CONFIG.particleCount * 3);
+            for (let i = 0; i < CONFIG.particleCount; i++) {
+                // 斜向银河：x 和 y 相关联，z 轴有深度
+                // 核心区域密度大，边缘稀疏
+                const angle = Math.random() * Math.PI * 2;
+                const radius = THREE.MathUtils.randFloatSpread(100); // 广度
+                const spiral = 1.5; // 螺旋系数
+                
+                // 简单的斜向带状分布
+                const x = (Math.random() - 0.5) * 160; 
+                const y = x * 0.5 + (Math.random() - 0.5) * 60; // 斜率 0.5
+                const z = (Math.random() - 0.5) * 80;
+
+                galaxyPoints[i * 3] = x;
+                galaxyPoints[i * 3 + 1] = y;
+                galaxyPoints[i * 3 + 2] = z;
+            }
+        }
+
+        /**
+         * 生成猫点阵 (Canvas 采样法)
+         */
+        function generateCatPoints() {
+            // 创建离屏 Canvas 绘制猫
+            const size = 200;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            // 绘制猫剪影 (白色)
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#FFF';
+
+            const cx = size / 2;
+            const cy = size / 2;
+
+            // 身体 (椭圆)
+            ctx.beginPath();
+            ctx.ellipse(cx, cy + 20, 40, 50, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 头 (圆)
+            ctx.beginPath();
+            ctx.arc(cx, cy - 40, 30, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 耳朵 (三角形)
+            ctx.beginPath();
+            ctx.moveTo(cx - 25, cy - 60);
+            ctx.lineTo(cx - 35, cy - 90);
+            ctx.lineTo(cx - 10, cy - 65);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(cx + 25, cy - 60);
+            ctx.lineTo(cx + 35, cy - 90);
+            ctx.lineTo(cx + 10, cy - 65);
+            ctx.fill();
+
+            // 尾巴 (贝塞尔曲线描边 -> 填充)
+            ctx.beginPath();
+            ctx.moveTo(cx + 20, cy + 60);
+            ctx.quadraticCurveTo(cx + 70, cy + 60, cx + 70, cy + 10);
+            ctx.quadraticCurveTo(cx + 70, cy - 10, cx + 50, cy - 10);
+            ctx.lineWidth = 12;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#FFF';
+            ctx.stroke();
+
+            // 采样像素
+            const imgData = ctx.getImageData(0, 0, size, size);
+            const validPixels = [];
+            for (let y = 0; y < size; y += 2) { // 步长2，稀疏一点
+                for (let x = 0; x < size; x += 2) {
+                    const index = (y * size + x) * 4;
+                    if (imgData.data[index] > 128) { // 亮度阈值
+                        validPixels.push({ x, y });
+                    }
+                }
+            }
+
+            // 转换为 Three.js 坐标并填充 catPoints
+            catPoints = new Float32Array(CONFIG.particleCount * 3);
+            
+            // 如果有效像素不够，随机复用；如果多了，截断
+            for (let i = 0; i < CONFIG.particleCount; i++) {
+                const pixel = validPixels[i % validPixels.length];
+                // 归一化到 -1 ~ 1，再缩放
+                // y轴翻转，因为canvas坐标系y向下
+                const nx = (pixel.x / size - 0.5) * 60; // 缩放系数
+                const ny = -(pixel.y / size - 0.5) * 60;
+                
+                // 增加一点随机厚度 (3D感)
+                const nz = (Math.random() - 0.5) * 10;
+
+                catPoints[i * 3] = nx;
+                catPoints[i * 3 + 1] = ny;
+                catPoints[i * 3 + 2] = nz;
+            }
+        }
+
+        function createParticles() {
+            geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(CONFIG.particleCount * 3);
+            const sizes = new Float32Array(CONFIG.particleCount);
+            const colors = new Float32Array(CONFIG.particleCount * 3);
+            const opacities = new Float32Array(CONFIG.particleCount);
+
+            const color1 = new THREE.Color(CONFIG.colors.star1);
+            const color2 = new THREE.Color(CONFIG.colors.star2);
+            const color3 = new THREE.Color(CONFIG.colors.star3);
+
+            for (let i = 0; i < CONFIG.particleCount; i++) {
+                // 初始位置 = 银河位置
+                positions[i * 3] = galaxyPoints[i * 3];
+                positions[i * 3 + 1] = galaxyPoints[i * 3 + 1];
+                positions[i * 3 + 2] = galaxyPoints[i * 3 + 2];
+
+                // 大小与颜色分布
+                const r = Math.random();
+                let c;
+                if (r < 0.7) { // 70% 微粒
+                    sizes[i] = Math.random() * 1.0 + 0.5;
+                    c = color1;
+                    opacities[i] = Math.random() * 0.4 + 0.2;
+                } else if (r < 0.95) { // 25% 普通
+                    sizes[i] = Math.random() * 2.0 + 1.0;
+                    c = color2;
+                    opacities[i] = Math.random() * 0.6 + 0.4;
+                } else { // 5% 亮星
+                    sizes[i] = Math.random() * 4.0 + 2.0;
+                    c = color3;
+                    opacities[i] = 1.0;
+                }
+
+                colors[i * 3] = c.r;
+                colors[i * 3 + 1] = c.g;
+                colors[i * 3 + 2] = c.b;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+
+            // 自定义 Shader Material 实现圆形粒子和透明度控制
+            // 简单起见使用 PointsMaterial + map (canvas circle)
+            // 为了更好的效果，使用 ShaderMaterial 模拟 glow
+            const sprite = getSprite();
+
+            material = new THREE.PointsMaterial({
+                size: 1,
+                vertexColors: true,
+                map: sprite,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                transparent: true,
+                opacity: 0.8,
+                sizeAttenuation: true
+            });
+
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+        }
+
+        // 生成圆形辉光纹理
+        function getSprite() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+            grad.addColorStop(0, 'rgba(255,255,255,1)');
+            grad.addColorStop(0.2, 'rgba(255,255,255,0.8)');
+            grad.addColorStop(0.5, 'rgba(255,255,255,0.2)');
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 32, 32);
+            const texture = new THREE.Texture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        /**
+         * ============================================================================
+         * 2. MediaPipe Hands 初始化与手势识别
+         * ============================================================================
+         */
+        let hands;
+        let handLandmarks = null;
+
+        function initMediaPipe() {
+            hands = new Hands({locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }});
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            hands.onResults(onHandsResults);
+
+            // 启动摄像头
+            const cameraUtils = new Camera(ui.video, {
+                onFrame: async () => {
+                    await hands.send({image: ui.video});
+                },
+                width: 320,
+                height: 240
+            });
+            
+            return cameraUtils.start();
+        }
+
+        function onHandsResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                handLandmarks = results.multiHandLandmarks[0];
+                detectGesture(handLandmarks);
+            } else {
+                handLandmarks = null;
+                updateGestureHistory('none');
+            }
+        }
+
+        function detectGesture(landmarks) {
+            // 简单几何判断
+            // 0: wrist
+            // 5, 9, 13, 17: MCP (指根)
+            // 8, 12, 16, 20: TIP (指尖)
+            
+            // 判断手指弯曲：指尖到手腕的距离 < 指根到手腕的距离 (简化版)
+            // 更准确：指尖到MCP距离 vs 阈值，或者指尖y坐标 > 指根y坐标 (假设手掌向上)
+            // 这里使用：指尖是否靠近掌心 (0号点)
+            
+            const wrist = landmarks[0];
+            const tips = [8, 12, 16, 20]; // 食指、中指、无名指、小指
+            const mcps = [5, 9, 13, 17];
+            
+            let foldedCount = 0;
+            
+            // 计算手掌大小参考 (wrist 到 middle mcp)
+            const palmSize = dist(wrist, landmarks[9]);
+
+            for (let i = 0; i < 4; i++) {
+                const dTipWrist = dist(landmarks[tips[i]], wrist);
+                // 如果指尖到手腕距离 < 1.2倍手掌大小 (握拳时通常很近)
+                // 且指尖到手腕 < 指根到手腕 (弯曲)
+                // 这里的判断需要调试，取一个鲁棒的逻辑：
+                // 比较指尖到手腕距离 vs 指根到手腕距离
+                // 握拳时：Tip离Wrist很近
+                
+                if (dTipWrist < palmSize * 1.1) { // 稍微放宽
+                    foldedCount++;
+                }
+            }
+
+            // 拇指单独判断 (Tip 4 vs MCP 2)
+            const thumbTip = landmarks[4];
+            const thumbMcp = landmarks[2];
+            const dThumb = dist(thumbTip, landmarks[17]); // 拇指尖到小指根距离，握拳时近
+            if (dThumb < palmSize) foldedCount++;
+
+            let currentFrameGesture = 'none';
+            if (foldedCount >= 4) {
+                currentFrameGesture = 'fist';
+            } else if (foldedCount <= 1) { // 允许拇指弯曲
+                currentFrameGesture = 'open_palm';
+            }
+
+            updateGestureHistory(currentFrameGesture);
+        }
+
+        function dist(p1, p2) {
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2) + Math.pow(p1.z - p2.z, 2));
+        }
+
+        // 手势去抖
+        function updateGestureHistory(newGesture) {
+            appState.gestureHistory.push(newGesture);
+            if (appState.gestureHistory.length > CONFIG.gesture.historySize) {
+                appState.gestureHistory.shift();
+            }
+
+            // 多数票决
+            const counts = { 'fist': 0, 'open_palm': 0, 'none': 0 };
+            appState.gestureHistory.forEach(g => counts[g]++);
+
+            let stableGesture = 'none';
+            if (counts['fist'] > CONFIG.gesture.historySize * CONFIG.gesture.threshold) stableGesture = 'fist';
+            else if (counts['open_palm'] > CONFIG.gesture.historySize * CONFIG.gesture.threshold) stableGesture = 'open_palm';
+            
+            // 状态机切换
+            const now = Date.now();
+            if (stableGesture !== appState.gesture && (now - appState.lastGestureChange > CONFIG.gesture.cooldown)) {
+                appState.gesture = stableGesture;
+                appState.lastGestureChange = now;
+                handleStateTransition(stableGesture);
+            }
+        }
+
+        function handleStateTransition(gesture) {
+            const oldState = appState.current;
+            
+            if (gesture === 'fist') {
+                appState.current = STATE.GATHER_CAT;
+                if (oldState !== STATE.GATHER_CAT) playSound('gather');
+            } else if (gesture === 'open_palm') {
+                appState.current = STATE.RELEASE;
+                if (oldState === STATE.GATHER_CAT) playSound('release');
+            } else {
+                // none 保持当前状态，或者如果当前是 RELEASE 且动画完成则回 IDLE
+                // 这里简化：none 不强制改变状态，让粒子自然漂浮
+                // 但如果长时间 none，应该慢慢回到 IDLE 银河
+                // 逻辑：RELEASE 最终会变成 IDLE 视觉，所以 RELEASE 状态本身就是回银河的过程
+                if (appState.current === STATE.GATHER_CAT) {
+                    // 失去手势，猫解体
+                    appState.current = STATE.RELEASE;
+                }
+            }
+            
+            // 更新 HUD
+            ui.debugGesture.textContent = gesture;
+            ui.debugState.textContent = appState.current;
+        }
+
+        /**
+         * ============================================================================
+         * 3. 动画循环与逻辑
+         * ============================================================================
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = Date.now() * 0.001;
+            const delta = clock.getDelta();
+
+            // 更新粒子位置
+            updateParticles(time, delta);
+
+            // 渲染
+            renderer.render(scene, camera);
+
+            // HUD 更新
+            if (appState.debugMode) {
+                ui.debugFps.textContent = Math.round(1 / delta);
+                ui.debugParticles.textContent = CONFIG.particleCount;
+            }
+
+            // 检查彩蛋
+            checkEasterEgg(delta);
+        }
+
+        function updateParticles(time, dt) {
+            if (!particles) return;
+
+            const positions = particles.geometry.attributes.position.array;
+            
+            // 阻尼系数：不同状态不同
+            // GATHER: 强吸附
+            // RELEASE: 弱吸附（回银河），加噪点
+            // IDLE: 漂浮
+
+            let targetBuffer = galaxyPoints;
+            let lerpFactor = 0.02; // 默认平滑度
+            let noiseStrength = 0.05;
+
+            if (appState.current === STATE.GATHER_CAT) {
+                targetBuffer = catPoints;
+                lerpFactor = 0.05; // 汇聚快一点
+                noiseStrength = 0.01; // 猫形态比较稳定
+                
+                // 呼吸效果
+                const breath = Math.sin(time * 2) * 0.5 + 1.0; // 0.5 ~ 1.5
+                // 这里只改变材质大小可能不够明显，可以微调位置
+            } else if (appState.current === STATE.RELEASE) {
+                targetBuffer = galaxyPoints;
+                lerpFactor = 0.01; // 散开慢一点
+                noiseStrength = 0.1;
+            }
+
+            for (let i = 0; i < CONFIG.particleCount; i++) {
+                const ix = i * 3;
+                const iy = i * 3 + 1;
+                const iz = i * 3 + 2;
+
+                // 目标位置
+                const tx = targetBuffer[ix];
+                const ty = targetBuffer[iy];
+                const tz = targetBuffer[iz];
+
+                // 当前位置
+                let px = positions[ix];
+                let py = positions[iy];
+                let pz = positions[iz];
+
+                // 物理插值 (简单的 seek behavior)
+                px += (tx - px) * lerpFactor;
+                py += (ty - py) * lerpFactor;
+                pz += (tz - pz) * lerpFactor;
+
+                // 漂浮噪点 (Perlin noise would be better, but simple sin/cos is fine)
+                // 每个粒子有不同的相位
+                const floatSpeed = 0.5;
+                const floatAmp = (appState.current === STATE.GATHER_CAT) ? 0.05 : 0.2;
+                
+                px += Math.sin(time * floatSpeed + i) * floatAmp;
+                py += Math.cos(time * floatSpeed + i * 0.5) * floatAmp;
+
+                positions[ix] = px;
+                positions[iy] = py;
+                positions[iz] = pz;
+            }
+
+            particles.geometry.attributes.position.needsUpdate = true;
+
+            // 检查猫是否成型 (简单判断：如果大部分粒子接近目标)
+            if (appState.current === STATE.GATHER_CAT) {
+                // 这里的判断不需要太精确，用时间判断即可
+                if (Date.now() - appState.lastGestureChange > 2000) {
+                    // 稳定成型 2秒后
+                    if (!appState.hasShownMainText) {
+                        showText(ui.mainMsg, 3000);
+                        appState.hasShownMainText = true; // 只显示一次
+                    }
+                }
+            } else {
+                // 重置文案显示标记（可选：如果希望每次握拳都显示，就重置）
+                // 需求说：不要重复刷屏，加冷却。这里简单处理：只显示一次，或者冷却很久
+                // appState.hasShownMainText = false; 
+            }
+        }
+
+        /**
+         * 彩蛋检测
+         * 手心位置在屏幕下方中间区域
+         */
+        function checkEasterEgg(dt) {
+            if (!handLandmarks) return;
+            
+            // 9号点是中指根部，接近手心
+            const palm = handLandmarks[9]; 
+            
+            // MediaPipe 坐标: x, y [0, 1]. x: 0左 1右, y: 0上 1下
+            // 屏幕中间偏下: x ~ 0.5, y > 0.6
+            
+            // 注意：视频是镜像的，但landmarks坐标也是对应的。
+            // 如果我们做了镜像显示，landmarks的x坐标可能需要反转理解？
+            // MediaPipe输出的x是归一化的，0是画面左边。
+            // 我们的预览做了 scaleX(-1)，所以视觉上左手在左边。
+            // 逻辑上 x 0.4-0.6 依然是中间。
+            
+            const isCentered = (palm.x > 0.4 && palm.x < 0.6);
+            const isLower = (palm.y > 0.6 && palm.y < 0.9);
+            
+            if (isCentered && isLower && (appState.current === STATE.GATHER_CAT || appState.current === STATE.RELEASE)) {
+                appState.eggHoldStart += dt * 1000;
+                if (appState.eggHoldStart > CONFIG.egg.holdTime) {
+                    // 触发彩蛋
+                    if (Date.now() - appState.eggTriggerTime > CONFIG.egg.cooldown) {
+                        showText(ui.eggMsg, 4000);
+                        appState.eggTriggerTime = Date.now();
+                        playSound('egg');
+                    }
+                }
+            } else {
+                appState.eggHoldStart = 0;
+            }
+        }
+
+        /**
+         * ============================================================================
+         * 4. 辅助功能 (Audio, UI)
+         * ============================================================================
+         */
+        let audioCtx;
+        
+        function initAudio() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            } catch (e) {
+                console.warn('WebAudio not supported');
+            }
+        }
+
+        function playSound(type) {
+            if (appState.isMuted || !audioCtx) return;
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'gather') {
+                // 柔和的上升音
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(400, now + 1.5);
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.1, now + 0.5);
+                gain.gain.linearRampToValueAtTime(0, now + 1.5);
+                osc.start(now);
+                osc.stop(now + 1.5);
+            } else if (type === 'release') {
+                // 散开的风铃声
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 2.0);
+                gain.gain.setValueAtTime(0.05, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+                osc.start(now);
+                osc.stop(now + 2.0);
+            } else if (type === 'egg') {
+                // 叮
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.1, now + 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+                osc.start(now);
+                osc.stop(now + 2.0);
+            }
+        }
+
+        function showText(el, duration) {
+            el.style.opacity = 1;
+            setTimeout(() => {
+                el.style.opacity = 0;
+            }, duration);
+        }
+
+        function toggleMute() {
+            appState.isMuted = !appState.isMuted;
+            if (appState.isMuted) {
+                ui.iconOff.style.display = 'block';
+                ui.iconOn.style.display = 'none';
+            } else {
+                ui.iconOff.style.display = 'none';
+                ui.iconOn.style.display = 'block';
+                // 尝试 resume audio context
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            }
+        }
+
+        // 键盘事件
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'h') {
+                appState.debugMode = !appState.debugMode;
+                ui.debugHud.style.display = appState.debugMode ? 'block' : 'none';
+            }
+        });
+
+        // 启动逻辑
+        ui.startBtn.addEventListener('click', async () => {
+            ui.startBtn.style.display = 'none';
+            ui.spinner.style.display = 'block';
+            
+            initAudio();
+            initThree();
+
+            try {
+                await initMediaPipe();
+                // 成功
+                ui.overlay.style.opacity = 0;
+                setTimeout(() => {
+                    ui.overlay.style.display = 'none';
+                }, 800);
+                animate();
+            } catch (err) {
+                console.error(err);
+                ui.spinner.style.display = 'none';
+                ui.errorMsg.style.display = 'block';
+                ui.errorMsg.innerHTML += `<br><br>Error: ${err.message}`;
+            }
+        });
+
+        ui.muteBtn.addEventListener('click', toggleMute);
+
+    </script>
+</body>
+</html>
